@@ -15,15 +15,15 @@ contract Finance {
 
     struct Application {
         uint256 token_id; // NFT token ID
-        address applicant; 
+        address applicant;
         address lender;
         uint256 loan_amount; // asking amount
         uint256 offered_amount; // offered amount
-        uint256 preferred_rate; // asking rate
+        uint256 preferred_rate; // asking rate  100 is 1%
         uint256 offered_rate; // offered rate
-        uint256 preferred_monthly;  // asking monthly
+        uint256 preferred_monthly; // asking monthly
         uint256 offered_monthly; // offered monthly
-        uint256 timestamp;  // timestamp
+        uint256 timestamp; // timestamp
         bool approved;
         bool completed;
     }
@@ -52,38 +52,47 @@ contract Finance {
         _;
     }
 
-    event Applied (
+    event Applied(
         address indexed applicant,
         address indexed lender,
         uint256 amount,
         uint256 timestamp
     );
 
-    event LenderFinalize (
-        address indexed lender,
+    event PaidLender(
         address indexed applicant,
-        bool    approved
+        address indexed lender,
+        uint256 amount,
+        uint256 remaining_balance
     );
 
-    event Canceled (
+    event LenderFinalize(
+        address indexed lender,
+        address indexed applicant,
+        bool approved
+    );
+
+    event Canceled(
         address indexed applicant,
         uint256 token_id,
         uint256 timestamp
     );
 
-    event Completed (
+    event Completed(
         address indexed applicant,
         uint256 token_id,
         uint256 timestamp,
-        bool    approved
+        bool approved
     );
 
-    event LienInitiated (
+    event LienInitiated(
         address indexed borrower,
         address indexed lender,
         uint256 borrowed_amount
     );
-    
+
+
+    // forelcosed events
     constructor(address _admin) {
         admin = _admin;
     }
@@ -96,6 +105,10 @@ contract Finance {
         realEstate = RealEstate(_realEstate);
     }
 
+    /*
+        Allows a borrower to apply for a loan by setting an application for a specific NFT they own. 
+        The borrower can set the loan amount, preferred interest rate, and preferred monthly payment.
+    */
     // applies/sets application
     function applyForLending(
         uint256 token_id,
@@ -107,7 +120,7 @@ contract Finance {
         // get owner of token and verify owner == msg.sender
         address token_owner = realEstate.ownerOf(token_id);
         require(msg.sender == token_owner, "Unauthorized");
-        // get application
+        // get application from struct
         Application memory app = application[msg.sender][token_id];
         // if lending has been initiated
         if (app.token_id == token_id) {
@@ -135,6 +148,10 @@ contract Finance {
         return true;
     }
 
+    /*
+        Allows a lender to finalize a loan application by approving or rejecting the loan offer. 
+        If approved, the lender can set the loan amount, interest rate, and monthly payment.
+    */
     // lender finalizes app
     function lenderFinalizeApp(
         uint256 token_id,
@@ -151,7 +168,7 @@ contract Finance {
         app.offered_rate = offered_rate;
         app.approved = approved;
         // if not approved
-        if(!approved) {
+        if (!approved) {
             // complete the application
             app.completed = true;
             emit Completed(applicant, token_id, block.timestamp, approved);
@@ -162,6 +179,9 @@ contract Finance {
         return true;
     }
 
+    /*
+        Allows the borrower to cancel their loan application before it is approved or rejected.
+    */
     // applicant cancels application
     function cancelApplication(uint256 token_id) external returns (bool) {
         // get application and verify that msg.sender is the applicant
@@ -177,6 +197,9 @@ contract Finance {
         return true;
     }
 
+    /*
+        Allows the borrower to complete their loan application after it is approved and the lien form is initiated.
+    */
     // applicant can complete application after everything is completed
     function completeApplication(uint256 token_id) external returns (bool) {
         // retrieve application
@@ -191,8 +214,18 @@ contract Finance {
         application[msg.sender][token_id] = app;
         return true;
     }
+
+    /*
+        Allows the lender to initiate a lien form after the loan application is approved. 
+        The lien form sets the terms of the loan, including the amount lended, amount owed, interest rate, payment due date, and term length.
+    */
     // lender creates lien form after applicant is approved
-    function lenderInitiateForm(address applicant, uint256 token_id, uint8 errors_allowed, uint256 term_length) external returns (bool) {
+    function lenderInitiateForm(
+        address applicant,
+        uint256 token_id,
+        uint8 errors_allowed,
+        uint256 term_length
+    ) external returns (bool) {
         // gets application
         Application memory app = application[applicant][token_id];
         // ensures that lender is msg.sender
@@ -213,7 +246,7 @@ contract Finance {
             rate: app.offered_rate,
             payment_due: block.timestamp + 30 days,
             term_length: term_length,
-            active: true 
+            active: true
         });
         // updates mapping
         lienForm[app.applicant][token_id] = form;
@@ -221,19 +254,25 @@ contract Finance {
         return true;
     }
 
+    /*
+        Checks for delinquencies in loan payments and adds late fees if necessary. If there are too many delinquencies, the loan becomes inactive.
+    */
     // borrower/lender checks for errors
-    function checkForErrors(address borrower, uint256 token_id) public returns (uint256) {
+    function checkForErrors(
+        address borrower,
+        uint256 token_id
+    ) public returns (uint256) {
         // TODO ⚠️DO THE MATH FOR RATE / TIME PASSED RATIO, ⚠️
         // retrieve form
         LienForm memory form = lienForm[borrower][token_id];
         // ensure that msg.sender is only the borrower or lender
-        if(msg.sender != form.borrower) {
+        if (msg.sender != form.borrower) {
             require(msg.sender == form.lender, "Unauthorized");
         }
         // ensure its an active loan
         require(form.active, "Not active");
         // if right now is greater than the payment due date
-        if(block.timestamp > form.payment_due) {
+        if (block.timestamp > form.payment_due) {
             // add to errors
             form.errors++;
             // due date goes a month from missed due date
@@ -254,20 +293,41 @@ contract Finance {
         return form.errors;
     }
 
-
-    function payLender(address payable lender, uint256 token_id) public payable returns (bool) {
-        // first checks for errors
-        uint256 errors = checkForErrors(msg.sender, token_id);
-
+    /*
+        Allows the borrower to make payments towards the loan, which is sent to the lender. 
+        The function checks for delinquencies before accepting the payment and updates the amount owed and payment due date.
+    */
+    function payLender(
+        address payable lender,
+        uint256 token_id
+    ) public payable returns (bool) {
+        // get the finance/lien form
         LienForm memory form = lienForm[msg.sender][token_id];
+        // require the caller is the borrower
         require(msg.sender == form.borrower, "Unauthorized");
-        require(msg.value >= (form.amount_lended / form.term_length), "Insufficient value");
+        // checks for errors
+        uint256 errors = checkForErrors(msg.sender, token_id);
+        // require that this hasn't had too many errors (foreclosed?)
         require(errors < form.errors_allowed, "Too many deliquencies");
-        form.amount_owed -= msg.value;
-        form.payment_due = block.timestamp + 30 days;
-        lienForm[msg.sender][token_id] = form;
+        // gets minimum payment
+        uint256 minimum_payment = form.amount_lended / form.term_length;
+        // assert that the amount sent to the contract is at least the minimum payment
+        require(msg.value >= minimum_payment, "Insufficient value");
+        // someone is getting paaaaaaaid (lender)
         (bool success, ) = payable(lender).call{value: msg.value}("");
+        // assert it was sent
         require(success, "Failed to pay Lender");
+        // subtract the amount that was sent
+        uint256 interest_rate = form.rate / 12;
+        form.amount_owed -= msg.value;
+        form.amount_owed += ((form.amount_owed * interest_rate) / 100);
+        // make the next payment a month out from this payment
+        form.payment_due = block.timestamp + 30 days;
+        // sets the form
+        lienForm[msg.sender][token_id] = form;
+        // emits event that someone got paid
+        emit PaidLender(msg.sender, lender, msg.value, form.amount_owed);
+        // returns success
         return success;
     }
 }
