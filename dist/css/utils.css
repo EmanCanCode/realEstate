@@ -54,7 +54,14 @@
   .bg-media {
     background: #ccc;
     color: #000; }
+
   .lead {
+    font-size: 1.3rem;
+    margin-bottom: 2rem;
+    /* text-align: center; */
+    color: #000; }
+
+  .lead-center {
     font-size: 1.3rem;
     margin-bottom: 2rem;
     text-align: center;
@@ -108,6 +115,15 @@
   .mx-4 {
     margin: 0 4rem; }
   
+  .section-title-left {
+    display: flex;
+    flex-direction: row;
+    justify-content: flex-start;
+    font-size: 2rem;
+    padding-bottom: 0.5rem;
+    text-align: center;
+    font-weight: 100; }
+
   .section-title {
     font-size: 2rem;
     display: block;
@@ -209,3 +225,5 @@
       .card-container {
         padding: 2px 16px;
       }
+
+      
