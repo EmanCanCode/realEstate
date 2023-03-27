@@ -1,0 +1,211 @@
+.container {
+    width: 100%;
+    margin: auto;
+    overflow: hidden; }
+  
+  .btn-main, .btn-light, .btn-dark {
+    display: inline-block;
+    padding: 0.8rem 2rem;
+    transition: all 0.8s;
+    border: none;
+    cursor: pointer; }
+  
+  .connect-btn {
+    display: flex;
+    color: #417DC8;
+    padding: 1rem 2rem;
+    transition: all 0.8s;
+    border: none;
+    cursor: pointer; }
+  
+  .btn-main {
+    color: #000;
+    background-color: #417DC8; }
+  
+  .btn-light {
+    color: #333;
+    background-color: #f4f4f4; }
+  
+  .nav-btn-light {
+    color: #fff;
+    background-color: #417DC8; }
+  
+  .btn-dark {
+    color: #f4f4f4;
+    background-color: #333; }
+  
+  button[class^="btn-"]:hover,
+  a[class^="btn-"]:hover,
+  input[class^="btn-"]:hover {
+    background-color: #417DC8; }
+  
+  .bg-main {
+    background: #417DC8;
+    color: #000; }
+  
+  .bg-dark {
+    background: #333;
+    color: #fff; }
+  
+  .bg-light {
+    background: #f4f4f4;
+    color: #000; }
+  
+  .bg-media {
+    background: #ccc;
+    color: #000; }
+  .lead {
+    font-size: 1.3rem;
+    margin-bottom: 2rem;
+    text-align: center;
+    color: #000; }
+  
+  .py-1 {
+    padding: 1rem 0; }
+  
+  .py-2 {
+    padding: 2rem 0; }
+  
+  .py-3 {
+    padding: 3rem 0; }
+  
+  .py-4 {
+    padding: 4rem 0; }
+
+  .px-1 {
+    padding: 0 1rem; }
+  
+  .px-2 {
+    padding: 0 2rem; }
+  
+  .px-3 {
+    padding: 0 3rem; }
+  
+  .px-4 {
+    padding: 0 4rem; }
+  
+  .my-1 {
+    margin: 1rem 0; }
+  
+  .my-2 {
+    margin: 2rem 0; }
+  
+  .my-3 {
+    margin: 3rem 0; }
+  
+  .my-4 {
+    margin: 4rem 0; }
+
+  .mx-1 {
+    margin: 0 1rem; }
+  
+  .mx-2 {
+    margin: 0 2rem; }
+  
+  .mx-3 {
+    margin: 0 3rem; }
+  
+  .mx-4 {
+    margin: 0 4rem; }
+  
+  .section-title {
+    font-size: 2rem;
+    display: block;
+    padding-bottom: 0.5rem;
+    text-align: center;
+    font-weight: 100;
+    text-transform: uppercase; }
+  
+  .bottom-line {
+    height: 2px;
+    width: 3rem;
+    background: #417DC8;
+    display: block;
+    margin: 2rem auto; }
+  
+  .items {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    box-shadow: 0 5px 10px 0 rgba(0, 0, 0, 0.3);
+    grid-gap: 1rem; }
+  
+  .item {
+    position: relative;
+    background: #417DC8;
+    overflow: hidden; }
+    .item::after {
+      content: "";
+      position: absolute;
+      display: block;
+      background: inherit;
+      /* opacity: O 0.9; */
+      top: 0%;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      transform: scale(2) translateX(-75%) translateY(-75%) rotate(-28deg);
+      transition: transform 3s cubic-bezier(0.2, 1, 0.3, 1); }
+    .item:hover::after {
+      transform: scale(2) translateX(0) translateY(0) rotate(-28deg); }
+    .item:hover .item-image {
+      transform: scale(1.2); }
+    .item:hover .item-text {
+      opacity: 1;
+      transform: translateY(0); }
+    .item-image {
+      height: auto;
+      transform: translateZ(0);
+      display: block;
+      transition: transform 750ms cubic-bezier(0.2, 1, 0.3, 1); }
+    .item-image::before {
+      content: "";
+      display: block;
+      padding-top: 75%;
+      overflow: hidden; }
+    .item-image img {
+      position: absolute;
+      top: 0%;
+      left: 0;
+      width: 100%;
+      height: auto;
+      line-height: 0; }
+    .item-text {
+      position: absolute;
+      top: 0;
+      left: 0;
+      bottom: 0;
+      right: 0;
+      opacity: 0;
+      text-align: center;
+      z-index: 1;
+      color: #fff;
+      transform: translateY(-20%);
+      transition: opacity 500ms cubic-bezier(0.2, 1, 0.3, 1), transform 500ms cubic-bezier(0.2, 1, 0.3, 1);
+      transition-delay: 500ms; }
+    .item-text-wrap {
+      position: absolute;
+      width: 100%;
+      top: 50%;
+      transform: translateY(-50%); }
+    .item-text-title {
+      font-size: 2rem;
+      padding: 0 1rem;
+      margin: 5px; }
+    .item-text-category {
+      text-transform: uppercase;
+      font-size: 1.2rem;
+      opacity: 0.7;
+      margin: 0; }
+  
+      .card {
+        box-shadow: 0 4px 8px 0 rgba(0,0,0,0.2);
+        transition: 0.3s;
+        border-radius: 1rem;
+      }
+      .card:hover {
+        box-shadow: 0 8px 16px 0 rgba(0,0,0,0.2);
+      }
+      
+      .card-container {
+        padding: 2px 16px;
+      }
