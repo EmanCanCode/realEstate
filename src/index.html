@@ -24,29 +24,16 @@
       href="/realEstate/dist/css/gallery.css"
       media="screen"
     />
+    <script defer src="./scripts/main.js"></script>
     <script defer src="/realEstate/src/scripts/gallery.js"></script>
     <title>Home | Smart Block</title>
   </head>
   <body>
     <!-- header -->
-    <header id="header-home" class="header-home">
+    <header id="header-home" class="header">
       <div class="container">
-        <nav id="main-nav">
-          <ul>
-            <li><a href="Buy.html" class="current">Buy</a></li>
-            <li><a href="Sell.html" class="">Sell</a></li>
-            <li><a href="Invest.html" class="">Invest</a></li>
-            <li><a href="Support.html" class="">Support</a></li>
-          </ul>
-          <img
-            src="../dist/img/smart-block-logo.png"
-            alt="Smart Block"
-            id="logo"
-          />
-          <div class="connect-btn">
-            <h3>Connect</h3>
-          </div>
-        </nav>
+        <!-- nav -->
+        <div class="nav-container"></div>
         <div class="header-content">
           <h1>Find it. Own it. Sell it.</h1>
           <form action="GET">
@@ -186,10 +173,6 @@
     <section id="home-c" class="py-2"></section>
 
     <!-- footer -->
-    <footer id="main-footer">
-      <div class="footer-content">
-        <p>Copyright 2023 &copy; All Rights Reserved</p>
-      </div>
-    </footer>
+    <div class="footer-container"></div>
   </body>
 </html>
