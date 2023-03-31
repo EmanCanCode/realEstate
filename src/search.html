@@ -3,24 +3,54 @@
   <head>
     <meta charset="UTF-8" />
     <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      integrity="sha512-9usAa10IRO0HhonpyAIVpjrylPvoDwiPUiKdWk5t3PyolY1cOd4DSE0Ga+ri4AuTroPR5aQvXU9xC6qOPnzFeg=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Yanone+Kaffeesatz&display=swap"
+      rel="stylesheet"
+    />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="stylesheet" href="/realEstate/dist/css/utils.css" />
     <link rel="stylesheet" href="/realEstate/dist/css/main.css" />
-    
+
     <script src="https://polyfill.io/v3/polyfill.min.js?features=default"></script>
 
+    <script defer src="./scripts/main.js"></script>
     <script defer type="module" src="./scripts/googleApi.js"></script>
     <script defer type="module" src="./scripts/map.js"></script>
-    
+
     <title>Search | Smart Block</title>
   </head>
   <body>
-      <section class="map-listings-container">
+    <!-- header -->
+
+    <div class="container">
+      <div class="nav-container"></div>
+      <div class="search-box mx-1 py-1">
+        <form action="GET">
+          <input
+            class="search-input"
+            type="text"
+            placeholder="Enter an address,neighborhood, city or ZIP code "
+          />
+        </form>
+      </div>
+    </div>
+    <section class="map-listings-container">
       <div id="map"></div>
-      <div id="sidebar"></div>
+      <div id="sidebar" class="mx-2"></div>
     </section>
-      <script>
-          ((g) => {
+    <!-- footer -->
+    <div class="footer-container"></div>
+    <script>
+      ((g) => {
         var h,
           a,
           k,
