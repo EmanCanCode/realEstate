@@ -1,136 +1,93 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
-import "@openzeppelin/contracts/utils/Address.sol";
-import "@openzeppelin/contracts/utils/Strings.sol";
-import "./Escrow.sol";
-import "./Verify.sol";
+import "./Escrow.sol"; // escrow contract
+import "./TypesEscrow.sol"; // escrow types
+import "./Verify.sol"; // verify library
 
 contract FactoryEscrow {
-    address public nft_address;
-    address payable public admin;
-    uint256 public factory_fee;
-    bool public paused;
-    mapping(uint256 => address payable) public cache;
+    // owner address
+    address public owner;
+    // escrow contract address
+    uint public escrowCount = 0;
+    // escrow fee
+    uint public fee;
+    mapping(address => mapping(uint => address)) public escrows; // tracks escrow contracts. give it the token address and the token id, get the escrow contract address
 
-    struct EscrowForm {
-        uint256 _nonce;
-        uint256 _nftID;
-        uint256 _purchase_price;
-        uint256 _escrow_amount;
-        address payable _seller;
-        address payable _buyer;
-        address _inspector;
-        address _lender;
-        address _appraiser;
-    }
+    event EscrowCreated(
+        address indexed _nft_address,
+        uint indexed _nft_id,
+        address indexed _escrow_address
+    );
 
-    constructor(address payable _admin, uint256 _factory_fee, address _nft_address) {
-        admin = _admin;
-        factory_fee = _factory_fee;
-        nft_address = _nft_address;
-    }
 
-    modifier onlyAdmin() {
-        require(msg.sender == admin, "Unauthorized");
-        _;
-    }
-
-    function setAdmin(address payable _admin)
-        external
-        onlyAdmin
-        returns (bool success)
-    {
-        admin = _admin;
-        success = true;
-    }
-
-    function concatenate(
-        address _seller,
-        address _buyer,
-        address _inspector,
-        address _lender,
-        address _appraiser,
-        uint256 _price, 
-        uint256 _nonce, 
-        uint256 _nft_id
-        
-    ) public pure returns (bytes memory) {
-        // Concatenate the data together
-        return abi.encodePacked(_seller, _buyer, _inspector, _lender, _appraiser, _price, _nonce, _nft_id);
+    constructor(
+        uint _fee
+    ) {
+        owner = msg.sender;
+        fee = _fee;
     }
 
     function createEscrow(
-        EscrowForm memory escrow_form, 
-        VerifySignature.VerifyForm memory verify_form
-    ) public payable returns (bool success) {
-        // if actor is not the seller
-        if (msg.sender != escrow_form._seller) {
-            // or buyer
-            require(msg.sender == escrow_form._buyer, "Unauthorized");
+        TypesEscrow.EscrowForm memory _form,
+        bytes[3] memory _signatures
+    ) external payable {
+        // ensure that the escrow does not already exist, if it does, ensure that it is completed
+        address escrow_address = escrows[_form.nft_address][_form.nft_id];
+        if (escrow_address != address(0)) {
+            Escrow _escrow = Escrow(payable(escrow_address));
+            require(_escrow.completed(), "Escrow already exists");
         }
-
-        // verify that the seller of the nft actually signed this data, or this could be a bad actor
-        uint256 nft_id = escrow_form._nftID;
-        address nft_owner = IERC721(nft_address).ownerOf(nft_id);
-        require(escrow_form._seller == nft_owner, "Owner is not the seller");
-        // require signer is seller
-        require(verify_form._signer == escrow_form._seller, "Signer is not the seller");
-        // ensure the message is seller, purchase price and nonce concatenated in a string
-        bytes memory escrow_message_bytes = concatenate(escrow_form._seller, escrow_form._buyer, escrow_form._inspector, escrow_form._lender, escrow_form._appraiser, escrow_form._purchase_price, escrow_form._nonce, escrow_form._nftID);
-        require(keccak256(escrow_message_bytes) == keccak256(abi.encodePacked(verify_form._message)), "Messages do not match");
-        // verify ec verify that the signer/seller signed the signature
-        bool valid = VerifySignature.verify(verify_form);
-        require(valid, "Signature verification failed");
-
-        // sufficient funds
-        require(msg.value >= factory_fee, "Insufficient funds");
-        // if an escrow has been created for this nft id before
-        if (cache[escrow_form._nftID] != payable(address(0))) {
-            // ensure that the CURRENT owner is the seller in the escrow
-            address current_owner = IERC721(nft_address).ownerOf(escrow_form._nftID);
-            require(current_owner == escrow_form._seller, "Current owner is not the seller");
-            // get instance of the contract
-            Escrow _escrow = Escrow(cache[escrow_form._nftID]);
-            // get the 'completed' state variable
-            bool completed = _escrow.completed();
-            // require escrow lifecycle to be completed
-            require(completed, "Escrow not completed");
-        }
-        // create new escrow contract
-        Escrow escrow = new Escrow(
-            nft_address,
-            escrow_form._nftID,
-            escrow_form._purchase_price,
-            escrow_form._escrow_amount,
-            escrow_form._seller,
-            escrow_form._buyer,
-            escrow_form._inspector,
-            escrow_form._lender,
-            escrow_form._appraiser,
-            address(this) 
+        // ensure the fee is paid
+        require(msg.value > fee, "Insufficient funds to create escrow");
+        // ensure that the buyer, seller and lender all signed the message / all in accordance with the escrow form and selling of the nft
+        bytes32 signature_digest = Verify.getEthSignedMessageHash(
+            Verify.getMessageHash(_form)
         );
-        // update mapping
-        cache[escrow_form._nftID] = payable(address(escrow));
-        success = true;
+        for (uint8 i = 0; i < 3; i++) {
+            address signer = Verify.recoverSigner(
+                signature_digest,
+                _signatures[i]
+            );
+            if (i == 0) {
+                require(signer == _form.buyer, "Buyer signature invalid");
+            } else if (i == 1) {
+                require(signer == _form.seller, "Seller signature invalid");
+            } else {
+                require(signer == _form.lender, "Lender signature invalid");
+            }
+        }
+
+        // create the escrow contract
+        Escrow escrow = new Escrow(
+            _form.nft_address,
+            _form.nft_id,
+            _form.purchase_price,
+            _form.earnest_amount,
+            payable(_form.seller),
+            payable(_form.buyer),
+            _form.inspector,
+            _form.lender,
+            _form.appraiser,
+            address(this)
+        );
+
+        // transfer the nft from the seller to the escrow contract
+        IERC721(_form.nft_address).transferFrom(
+            _form.seller,
+            address(escrow),
+            _form.nft_id
+        );
+
+        // track the escrow contract
+        escrows[_form.nft_address][_form.nft_id] = address(escrow);
+
+        // emit the event
+        emit EscrowCreated(_form.nft_address, _form.nft_id, address(escrow));
     }
 
-    function setFactoryFee(uint256 _factory_fee) onlyAdmin external returns (bool success) {
-        factory_fee = _factory_fee;
-        success = true;
-    }
 
-    function withdraw() external onlyAdmin returns (bool) {
-        (bool success, ) = payable(admin).call{value: factory_fee}("");
-        require(success, "Failed to withdraw");
-        return success;
-    }
-
-    function cancelEscrow(uint256 _nft_id) onlyAdmin public returns (bool) {
-        Escrow _escrow = Escrow(cache[_nft_id]);
-        bool completed = _escrow.completed();
-        require(!completed, "Already completed");
-        bool canceled = _escrow.cancelSale();
-        require(canceled, "Error canceling");
-        return canceled;
+    function withdrawFee() external {
+        require(msg.sender == owner, "Unauthorized");
+        payable(owner).transfer(address(this).balance);
     }
 }

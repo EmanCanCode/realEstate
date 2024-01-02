@@ -1,64 +1,28 @@
-//SPDX-License-Identifier: Unlicense
+//SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
 interface IERC721 {
-    function transferFrom(
-        address _from,
-        address _to,
-        uint256 _id
-    ) external;
+    function transferFrom(address _from, address _to, uint256 _id) external;
 
     function ownerOf(uint256 tokenId) external view returns (address owner);
 }
 
 contract Escrow {
-    // todo finish sending the 721 back to seller
-    address public nft_address;      // address of the nft in the escrow
-    uint256 public nft_id;           // id of the nft in the escrow
-    uint8 public fee = 10;           // 10% from the seller
-    uint256 public purchase_price;   // purchase price for the house
+    address public immutable nft_address; // nft's address
+    uint256 public immutable nft_id; // nft's id
+    uint8 public fee = 1;
+    uint256 public purchase_price; // purchase price for the house
     uint256 public appraisal_amount; // appraiser amount for the house
-    uint256 public earnest_amount;   // earnest amount
-    address payable public seller;   // seller of the nft
-    address payable public buyer;    // buyer of the nft
-    address public appraiser;        // appraiser of the nft
-    address public inspector;        // inspector of the nft
-    address public lender;           // lending institution, if no lender, make lender same address as buyer
-    bool public completed;           // completion state
-    address public factory;          // factory address
-    mapping(address => uint256) public deposit_balance; // tracks user deposit balances
-
-    modifier onlyBuyer() {
-        require(msg.sender == buyer, "Only buyer can call this method");
-        _;
-    }
-
-    modifier onlySeller() {
-        require(msg.sender == seller, "Only seller can call this method");
-        _;
-    }
-
-    modifier onlyInspector() {
-        require(msg.sender == inspector, "Only inspector can call this method");
-        _;
-    }
-
-    modifier onlyLender() {
-        require(msg.sender == lender, "Unauthorized");
-        _;
-    }
-
-    modifier onlyAppraiser() {
-        require(msg.sender == appraiser, "Unauthorized");
-        _;
-    }
-
-    modifier notCompleted() {
-        require(!completed, "Escrow closed");
-        _;
-    }
-
-    mapping(address => bool) public approval;
+    uint256 public immutable earnest_amount; // earnest amount
+    address payable public immutable seller; // seller's address
+    address payable public buyer; // buyer's address
+    address public appraiser; // appraiser's address
+    address public inspector; // inspector of the nft
+    address public lender; // lending institution's address. if the same as the buyer, then the buyer is paying in cash and not taking out a loan
+    bool public completed = true; // completion state
+    address public immutable factory; // factory address
+    mapping(address => uint256) public deposit_balance; // tracks user deposit balances. give it an address, get that address's deposit balance
+    mapping(address => bool) public approval; // tracks approval status of each party. give it an address, get that address's approval status
 
     constructor(
         address _nft_address,
@@ -84,129 +48,161 @@ contract Escrow {
         appraiser = _appraiser;
     }
 
+    receive() external payable {
+        revert("Do not send ETH directly to this contract");
+    }
+
+    fallback() external payable {
+        revert("Do not send ETH directly to this contract");
+    }
+
+    // ensures that the sale is not completed when this modifier is invoked
+    modifier notCompleted() {
+        require(purchase_price > 0, "Sale was cancelled"); // ensure sale is not cancelled
+        require(!completed, "Escrow completed");
+        _;
+    }
+
+    modifier onlyAuthorized() {
+        // ensure only the authorized parties can call this method
+        require(
+            msg.sender == buyer ||
+                msg.sender == seller ||
+                msg.sender == inspector ||
+                msg.sender == lender,
+            "Unauthorized"
+        );
+        _;
+    }
+
+    // emit this event when the sale is finalized, allows for off-chain processing of the sale. (e.g. minting a new nft, API calls, etc.)
     event FinalizedSale(
         uint256 nft_id,
         uint256 purchase_price,
         address indexed seller,
         address indexed buyer
     );
-
-    event CanceledSale(
-        address indexed actor,
-        uint256 total_returned
-    );
+    // emit this event when the sale is canceled, allows for off-chain processing of the sale. (e.g. minting a new nft, API calls, etc.)
+    event CanceledSale(address indexed actor, uint256 total_returned);
+    // emit this event when a deposit is made
+    event Deposit(address indexed actor, uint256 amount);
+    // emit this event when the appraiser initializes the appraisal value
+    event AppraisalInitialized(uint256 indexed nft_id, uint256 appraisal_value, address indexed appraiser);
+    // emit this event when the sale is approved
+    event SaleApproved(address indexed approver, uint256 indexed nft_id);
+    // emit this event when a payment is processed
+    event PaymentProcessed(address indexed payee, uint256 amount);
+    // emit this event when earnest is deposited
+    event EarnestDepositReceived(address indexed depositor, uint256 amount);
 
     // buyer deposits earnest
-    function depositEarnest() public payable onlyBuyer notCompleted {
+    function depositEarnest() public payable {
+        require(purchase_price > 0, "Sale was cancelled"); // ensure sale is not cancelled
+        require(completed, "Sale not completed"); // ensure sale is not completed ()
+        require(msg.sender == buyer, "Unauthorized");
         require(msg.value >= earnest_amount);
         deposit_balance[msg.sender] += msg.value;
+        completed = false; // set completed to false to prevent sale from being finalized until earnest is deposited
+
+        emit EarnestDepositReceived(msg.sender, msg.value);
     }
 
-    function updateAppraisalValue(uint256 _value)
-        public
-        onlyAppraiser
-        notCompleted
-    {
+    // how the appraiser can initiate the nft evaluation
+    function initializeAppraisalValue(uint256 _value) external notCompleted {
+        require(msg.sender == appraiser, "Unauthorized");
         appraisal_amount = _value;
+
+        emit AppraisalInitialized(nft_id, _value, appraiser);
     }
 
     // Approve Sale
-    function approveSale() public notCompleted {
+    function approveSale() external notCompleted onlyAuthorized {
         approval[msg.sender] = true;
+        emit SaleApproved(msg.sender, nft_id);
     }
 
-    function finalizeSale() public notCompleted returns (bool) {
-        require(approval[inspector], "Inspection not passed");
-        require(approval[seller], "Sell did not approve");
-        require(approval[buyer], "Buyer did not approve");
-        require(approval[lender], "Lender did not approve");
-        require(approval[appraiser], "Appraiser did not approve");
+    function finalizeSale() public notCompleted onlyAuthorized {
+        // Checks
+        require(_checkApprovals(), "Not all parties have approved");
         require(
             appraisal_amount >= purchase_price,
             "Price higher than appraisal"
         );
-        // verify contract balance is at least the purchase price
-        require(address(this).balance >= purchase_price);
-        // send seller assets, take fees
-        (bool success, ) = payable(seller).call{value: purchase_price - fee}("");
-        require(success, "Failed to send seller ETH");
-        // todo ETHER: have a secondary way to transfer the NFT if the fee is failed but seller got their money
-        (success, ) = payable(factory).call{value: fee}("");
-        require(success, "Failed to send factory fees");
-        completed = true;
-        // send to finance contract
-        // todo transfer to the lender
-        IERC721(nft_address).transferFrom(address(this), buyer, nft_id);
-        emit FinalizedSale(nft_id, purchase_price, seller, buyer);
-        return true;
+        require(_checkDepositBalances(), "Not enough funds in escrow");
+
+        // Effects
+        completed = true; // Mark the sale as completed
+        uint256 _purchase_price = purchase_price; // Store purchase price in a local variable
+        purchase_price = 0; // Reset purchase price to prevent reinitialization
+
+        // Reset deposit balances
+        deposit_balance[buyer] = 0;
+        deposit_balance[lender] = 0;
+
+        // Interactions
+        // Transfer NFT to lender. if lender == buyer, then the buyer is paying in cash and not taking out a loan;
+        IERC721(nft_address).transferFrom(address(this), lender, nft_id);
+
+        // Handle payments
+        _handlePayments(_purchase_price);
+
+        // Emit event
+        emit FinalizedSale(nft_id, _purchase_price, seller, buyer);
     }
 
+    // Internal function to handle payments
+    function _handlePayments(uint256 _purchase_price) internal {
+        // Calculate the seller's amount after fee deduction
+        uint256 seller_amount = (_purchase_price * (100 - fee)) / 100;
 
-    function deposit()
-        external
-        payable
-        notCompleted
-    {
+        // Send the calculated amount to the seller
+        (bool success, ) = payable(seller).call{value: seller_amount}("");
+        require(success, "Failed to send seller ETH");
+
+        // Send the remaining amount to the factory
+        (success, ) = payable(factory).call{value: address(this).balance}("");
+
+        emit PaymentProcessed(seller, seller_amount);
+    }
+
+    function deposit() external payable notCompleted {
         // if actor is not the buyer
-        if(msg.sender != buyer) {
+        if (msg.sender != buyer) {
             // or the lender, what are you doing???
             require(msg.sender == lender, "Unauthorized");
         }
         deposit_balance[msg.sender] += msg.value;
+
+        // emit event
+        emit Deposit(msg.sender, msg.value);
     }
 
-    // Cancel Sale (handle earnest deposit)
-    // -> if inspection status is not approved, then refund, otherwise send to seller
-    function cancelSale() public notCompleted returns (bool) {
-        // if actor is not the seller
-        if(msg.sender != seller) {
-            // or buyer
-            if(msg.sender != buyer) {
-                // or the factory
-                if(msg.sender != factory) { // placed just in case of emergency, break glass 
-                    // or the lender, what are you doing???
-                    require(msg.sender != lender, "Unauthorized");
-                }
-            }
-        } 
-        // TODO: Get more info on how to handle cancellation
-        (bool success, uint256 amount_a) = _cancelSale(buyer);
-        require(success, "Failed to cancel");
-        // if buyer was financed
-        if(buyer != lender) {
-            (bool _success, uint256 amount_b) = _cancelSale(lender);
-            require(_success, "Failed to cancel");
-            amount_a += amount_b;
-        }
-
-        completed = true;
-        // this should be buyer, seller or lender only
-        emit CanceledSale(msg.sender, amount_a);
-        return true;
-    }
-
-    // !! last
-    function _cancelSale(address recipient) internal returns (bool, uint256) {
-        // gets deposit amount
-        uint256 amount = deposit_balance[recipient];
-        // resets balance
-        deposit_balance[recipient] = 0;
-        // if recipient has any amount of ETH deposited
-        if(amount > 0) {
-            (bool success, ) = payable(recipient).call{value: amount}("");
-            require(success, "Failed to send ether");
-        }
-        // returned to the seller
+    // Cancel Sale
+    function cancelSale() public notCompleted {
+        completed = true; // set completed to true to prevent sale from being finalized again (reentrancy attack)
+        purchase_price = 0; // set purchase price to 0 to prevent sale from being reinitialized again
+        // return nft to seller
         IERC721(nft_address).transferFrom(address(this), seller, nft_id);
-        return (true, amount);
+
+        // reset deposit balances
+        uint buyer_deposit = deposit_balance[buyer];
+        uint lender_deposit = deposit_balance[lender];
+        deposit_balance[buyer] = 0;
+        deposit_balance[lender] = 0;
+
+        // return all assets to buyer and lender
+        _refund(buyer_deposit, lender_deposit);
+
+        // emit event
+        emit CanceledSale(
+            msg.sender,
+            deposit_balance[buyer] + deposit_balance[lender]
+        );
     }
 
-    // send money back to depositer: 
-    // function refund()
+    // public helpers
 
-    receive() external payable {}
-
-    function getBalance() external view returns (uint256) {
+    function getBalance() public view returns (uint256) {
         return address(this).balance;
     }
 
@@ -216,5 +212,30 @@ contract Escrow {
         (bool success, ) = factory.call{value: amount}("");
         require(success, "Failed to send ether");
         return success;
+    }
+
+    // internal
+
+    function _checkApprovals() internal view returns (bool) {
+        return
+            approval[inspector] &&
+            approval[seller] &&
+            approval[buyer] &&
+            approval[lender] &&
+            approval[appraiser];
+    }
+
+    function _checkDepositBalances() internal view returns (bool) {
+        return
+            deposit_balance[buyer] + deposit_balance[lender] ==
+            purchase_price &&
+            getBalance() >= purchase_price;
+    }
+
+    function _refund(uint _buyer_deposit, uint _lender_deposit) internal {
+        (bool success, ) = payable(buyer).call{value: _buyer_deposit}("");
+        require(success, "Failed to send buyer ETH");
+        (success, ) = payable(lender).call{value: _lender_deposit}("");
+        require(success, "Failed to send lender ETH");
     }
 }
