@@ -67,8 +67,7 @@ contract FactoryEscrow {
             payable(_form.buyer),
             _form.inspector,
             _form.lender,
-            _form.appraiser,
-            address(this)
+            _form.appraiser
         );
 
         // transfer the nft from the seller to the escrow contract

@@ -33,9 +33,9 @@ contract Escrow {
         address payable _buyer,
         address _inspector,
         address _lender,
-        address _appraiser,
-        address _factory
+        address _appraiser
     ) {
+        factory = msg.sender;
         nft_address = _nft_address;
         nft_id = _nft_id;
         purchase_price = _purchase_price;
@@ -44,7 +44,6 @@ contract Escrow {
         buyer = _buyer;
         inspector = _inspector;
         lender = _lender;
-        factory = _factory;
         appraiser = _appraiser;
     }
 
