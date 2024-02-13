@@ -1,13 +1,21 @@
 //SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
+import "./Verify.sol";
+import "@openzeppelin/contracts/token/ERC721/IERC721Receiver.sol";
+
 
 interface IERC721 {
     function transferFrom(address _from, address _to, uint256 _id) external;
-
     function ownerOf(uint256 tokenId) external view returns (address owner);
+    function safeTransferFrom(address from, address to, uint256 tokenId, bytes calldata data) external;
 }
 
-contract Escrow {
+interface IFinance {
+    function depositNFT(uint _nftId) external;
+}
+
+contract Escrow  is IERC721Receiver {
+    // todo: add reentrancy protections
     address public immutable nft_address; // nft's address
     uint256 public immutable nft_id; // nft's id
     uint8 public fee = 1;
@@ -19,6 +27,7 @@ contract Escrow {
     address public appraiser; // appraiser's address
     address public inspector; // inspector of the nft
     address public lender; // lending institution's address. if the same as the buyer, then the buyer is paying in cash and not taking out a loan
+    address public financeContract; // address of the finance contract. nft is sent here if the buyer is financed by a lender. it will act as the escrow contract for the nft after the sale is finalized and the buyer is financed. (between buyer and lender)
     bool public completed = true; // completion state
     address public immutable factory; // factory address
     mapping(address => uint256) public deposit_balance; // tracks user deposit balances. give it an address, get that address's deposit balance
@@ -67,7 +76,8 @@ contract Escrow {
         require(
             msg.sender == buyer ||
                 msg.sender == seller ||
-                msg.sender == inspector ||
+                msg.sender == inspector || 
+                msg.sender == appraiser ||
                 msg.sender == lender,
             "Unauthorized"
         );
@@ -106,6 +116,39 @@ contract Escrow {
         emit EarnestDepositReceived(msg.sender, msg.value);
     }
 
+    function setFinanceContract(
+        address _financeContract, // address of the finance contract that will act as the escrow contract for the nft after the sale is finalized and the buyer is financed. (between buyer and lender)
+        bytes memory _buyerSignature, // buyer's signature of the location of the escrow after sale is finalized
+        bytes memory _lenderSignature // lender's signature of the location of the escrow after sale is finalized
+    ) external {
+        bytes32 messageDigest = keccak256(
+            abi.encodePacked(
+                'I, buyer at address: ',
+                buyer,
+                ' being financed by lender at address: ',
+                lender,
+                ' agree to hold the asset at address: ',
+                _financeContract,
+                ' after the sale is finalized'
+            )
+        );
+        require(
+            Verify.recoverSigner(
+                messageDigest,
+                _buyerSignature
+            ) == buyer,
+            "Invalid buyer signature"
+        );
+        require(
+            Verify.recoverSigner(
+                messageDigest,
+                _lenderSignature
+            ) == lender,
+            "Invalid lender signature"
+        );
+        financeContract = _financeContract;
+    }
+
     // how the appraiser can initiate the nft evaluation
     function initializeAppraisalValue(uint256 _value) external notCompleted {
         require(msg.sender == appraiser, "Unauthorized");
@@ -128,6 +171,12 @@ contract Escrow {
             "Price higher than appraisal"
         );
         require(_checkDepositBalances(), "Not enough funds in escrow");
+        if (lender != buyer) {
+            require(
+                financeContract != address(0),
+                "Finance contract not set"
+            );
+        }
 
         // Effects
         completed = true; // Mark the sale as completed
@@ -140,7 +189,13 @@ contract Escrow {
 
         // Interactions
         // Transfer NFT to lender. if lender == buyer, then the buyer is paying in cash and not taking out a loan;
-        IERC721(nft_address).transferFrom(address(this), lender, nft_id);
+        IERC721(nft_address).safeTransferFrom(
+            address(this), 
+            lender == buyer ? buyer : financeContract,  // if lender == buyer, then the buyer is paying in cash and not taking out a loan
+            nft_id, 
+            ""
+        );
+        IFinance(financeContract).depositNFT(nft_id); // deposit nft into finance contract if the buyer is financed by a lender
 
         // Handle payments
         _handlePayments(_purchase_price);
@@ -237,4 +292,15 @@ contract Escrow {
         (success, ) = payable(lender).call{value: _lender_deposit}("");
         require(success, "Failed to send lender ETH");
     }
+
+    function onERC721Received(
+        address operator,
+        address from,
+        uint256 tokenId,
+        bytes calldata data
+    ) external override returns (bytes4) {
+        // Return the function selector
+        return this.onERC721Received.selector;
+    }
+
 }

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.0;
+pragma solidity ^0.8.20;
 import "./Escrow.sol"; // escrow contract
 import "./TypesEscrow.sol"; // escrow types
 import "./Verify.sol"; // verify library
